@@ -1,0 +1,65 @@
+Practical Machine Learning Project The html version is available at Practical Machine Learning Purpose Given accelerometer data from various types of physical activities^1, we wish to predict the type of activity performed. The specifics of the project are detailed below: Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here:http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). Libraries The following library is necessary library(caret)
+
+Data Acquisition and Cleaning A directory was created, and the training data was acquired.
+
+Data acquisition
+
+if(!file.exists("data")) dir.create("data") # create a folder for data
+
+if(!file.exists("data/train.csv")){ download.file( "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="./data/train.csv", method="curl") # download training data }
+
+data = read.csv("data/train.csv", header=TRUE) # load the training data The data was then cleaned to remove any column containing empty entries or NA: clean_data = data.frame(matrix(1, nrow = nrow(data), ncol = 0))
+
+Data cleaning
+
+for(name in names(data)[-1]){ # the first column (indices) was removed if (any(is.na(data[, name]))) next # all columns containing NA removed if (any(data[, name] == "" )) next # all columns containing empty entries removed clean_data[, name] = data[, name] # all remaining columns added to clean_data } Cross-validation Partition The training data was then partitioned to enable cross-validation. Due to the extensive runtime of random forest algorithm in large data sets (when using the default caret package settings), a smaller training set was chosen, side-stepping the convention of the 60% training/40% testing split. Since the test set is significantly larger than the training set, our calculations will be biased toward overestimating the error.
+
+Cross-validation Partitioning
+
+inTrain <- createDataPartition(y=clean_data$classe, p=0.2, list=FALSE) training <- clean_data[inTrain,] # partition the training data into testing <- clean_data[-inTrain,] # training and testing data for cross-validation Zero Variance Columns Any columns exhibiting zero variance would now be removed. In this particular case, all columns exhibited nonzero variance. nsv <- nearZeroVar(training,saveMetrics=TRUE) # check for zero variance if(any(nsv$zeroVar)){ # remove zero variance columns if exist print("At least one covariate as zero variance. Commencing removal.") training <- training[!nsv$zeroVar,] testing <- testing[!nsv$zeroVar,] }else{ print("All selected columns have nonzero variance.") } Model Creation Random forest method was used to construct the model. The motivations for using random forest were as follows: 1. It can handle large numbers of covariates without much initial selection. 2. It is robust against input type and usually does not require preprocessing steps such as normalization. 3. It offers a means of determining variable importance (if necessary). 4. It is often very accurate. These features make random forest ideal for initial exploration of our data, which does have a large number of starting covariates.
+
+Model creation
+
+modFit <- train(classe ~ ., method="rf", data=training) # rf model print(modFit) # print fitness of model Loading required package: randomForest randomForest 4.6-10 Type rfNews() to see new features/changes/bug fixes. Loading required namespace: e1071 Random Forest
+
+3927 samples 58 predictors 5 classes: 'A', 'B', 'C', 'D', 'E'
+
+No pre-processing Resampling: Bootstrapped (25 reps)
+
+Summary of sample sizes: 3927, 3927, 3927, 3927, 3927, 3927, ...
+
+Resampling results across tuning parameters:
+
+mtry Accuracy Kappa Accuracy SD Kappa SD 2 0.967 0.958 0.00403 0.00509 41 0.990 0.987 0.00368 0.00465 80 0.987 0.984 0.00522 0.00660
+
+Accuracy was used to select the optimal model using the largest value. The final value used for the model was mtry = 41. Cross-validation/Out-of-Sample Error Cross-validation was performed using the previously partitioned testing data. Out-of-sample error is estimated to be 1-0.995 = 0.005. Recall that our out-of-sample error was biased toward over-estimating the error (given the large test-to-training ratio), meaning that an unbiased estimate of the out-of-sample error would likely be smaller than the computed error of 0.005, making the error rate quite respectable.
+
+Cross Validation/Out-of-Sample Error
+
+pred <- predict(modFit, newdata=testing) # run prediction on previously partitioned testing data
+
+Compute out-of-sample error
+
+print(confusionMatrix(pred, testing$classe)) # visualize via confusion matrix Confusion Matrix and Statistics
+
+      Reference
+Prediction A B C D E A 4463 21 0 0 0 B 1 3006 5 0 0 C 0 10 2719 17 0 D 0 0 13 2550 6 E 0 0 0 5 2879
+
+Overall Statistics
+
+           Accuracy : 0.995           
+             95% CI : (0.9938, 0.9961)
+No Information Rate : 0.2844          
+P-Value [Acc > NIR] : < 2.2e-16       
+
+              Kappa : 0.9937          
+Mcnemar's Test P-Value : NA
+
+Statistics by Class:
+
+                 Class: A Class: B Class: C Class: D Class: E
+Sensitivity 0.9998 0.9898 0.9934 0.9914 0.9979 Specificity 0.9981 0.9995 0.9979 0.9986 0.9996 Pos Pred Value 0.9953 0.9980 0.9902 0.9926 0.9983 Neg Pred Value 0.9999 0.9976 0.9986 0.9983 0.9995 Prevalence 0.2844 0.1935 0.1744 0.1639 0.1838 Detection Rate 0.2844 0.1915 0.1732 0.1625 0.1834 Detection Prevalence 0.2857 0.1919 0.1750 0.1637 0.1838 Balanced Accuracy 0.9990 0.9947 0.9957 0.9950 0.9988 Predictions After cleaning the test data in the same manner as the training data (described above), predictions were made based on the training model:
+
+Predictions for test_data
+
+pred <- predict(modFit, newdata=test_data) # actual predictions The predictions were made: predictions = B A B A A E D B A A B C B A E E A B B B All predictions turned out to be correct. ^1 Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
